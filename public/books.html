@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图书馆管理</title>
+    <script src="js/vue.js"></script>
+    <script src="js/axios.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        编号：<input type="text" id="id" v-model="id" :disabled="flag" v-focus>
+        名称：<input type="text" id="name" v-model.lazy="name">
+        <button @click="add" :disabled="submitFlag">提交</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>编号</th>
+                    <th>名称</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr :key='item.id' v-for='item in books'>
+                    <td>{{item.id}}</td>
+                    <td>{{item.name}}</td>
+                    <td>{{item.date | format('yyyy-MM-dd hh:mm:ss')}}</td>
+                    <td>
+                        <!-- 用item.id传参 -->
+                        <a href="" @click.prevent='toEdit(item.id)'>修改</a>
+                        <span>|</span>
+                        <a href="" @click.prevent='deleteBook(item.id)'>删除</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="total">图书总计：{{total}}</div>
+    </div>
+
+
+</body>
+<script>
+    axios.defaults.baseURL = 'http://localhost:3001/'
+    axios.interceptors.response.use(function(res){
+        return res.data
+    },function (error) {  
+        console.log(error)
+    })
+    Vue.directive('focus', {
+        inserted: function (el) {
+            console.log(el)
+            el.focus()
+        }
+    })
+    Vue.filter('format', function (value, arg) {
+        function dateFormat(date, format) {
+            if (typeof date === "string") {
+                var mts = date.match(/(\/Date\((\d+)\)\/)/)
+                if (mts && mts.length >= 3) {
+                    date = parseInt(mts[2])
+                }
+            }
+            date = new Date(date)
+            if (!date || date.toUTCString() == "Invalid Date") {
+                return ""
+            }
+            var map = {
+                "M": date.getMonth() + 1, //月份 
+                "d": date.getDate(), //日 
+                "h": date.getHours(), //小时 
+                "m": date.getMinutes(), //分 
+                "s": date.getSeconds(), //秒 
+                "q": Math.floor((date.getMonth() + 3) / 3), //季度 
+                "S": date.getMilliseconds() //毫秒 
+            }
+            format = format.replace(/([yMdhmsqS])+/g, function (all, t) {
+                var v = map[t];
+                if (v !== undefined) {
+                    if (all.length > 1) {
+                        v = '0' + v;
+                        v = v.substr(v.length - 2)
+                    }
+                    return v;
+                } else if (t === 'y') {
+                    return (date.getFullYear() + '').substr(4 - all.length)
+                }
+                return all
+            })
+            return format
+        }
+        return dateFormat(value, arg);
+    })
+    var app = new Vue({
+        el: '#app',
+        data: {
+            flag: false,
+            submitFlag: false,
+            id: '',
+            name: '',
+            books: []
+        },
+        methods: {
+            add: async function (id, name) {
+                if (this.flag == true) {
+                    //修改
+                    //注意some方法,此处用filter也可，some多用于判断calback中给定符合条件的元素是否存在，详情件watch中的运用
+                    let ret = await axios.put('books/'+ this.id,{
+                      name: this.name
+                    })
+                    if(ret.status == 200){
+                      this.queryData()
+                    }
+                    // this.books.filter((item) => {
+                    //     if (item.id == this.id) {
+                    //         item.name = this.name
+                    //         return true
+                    //     }
+                    // })
+                    // this.books.some((item) => {
+                    //     if (item.id == this.id) {
+                    //         item.name = this.name
+                    //         return true
+                    //     }
+                    // })
+                    //禁止修改id
+                    this.flag = false
+                } else {
+                    //添加
+                    // let book = {};
+                    // book.id = this.id
+                    // book.name = this.name
+                    // book.date = 1598927520144
+                    // this.books.push(book)
+
+                    //异步请求
+                    let ret = await axios.post('books',{
+                        name: this.name
+                    })
+                    if(ret.status == 200){
+                        this.queryData()
+                    }
+                }
+                //清空表单
+                this.id = ''
+                this.name = ''
+            },
+            toEdit: async function (id) {
+                // let book = this.books.filter(function (item) {
+                //     return item.id == id
+                // })
+                // console.log(book)
+                // this.id = book[0].id
+                // this.name = book[0].name
+                //flag用于区分编辑和添加
+                this.flag = true
+                //根据id查询出图书的信息
+                let ret = await axios.get('books/'+id)
+                this.id = ret.id 
+                this.name = ret.name
+            },
+            deleteBook: async function (id) {
+                // 法一 splice+findIndex
+                // let index = this.books.findIndex((item) => item.id == id)
+                // this.books.splice(index,1)
+                // 法二 filter
+                // this.books = this.books.filter((item) => item.id != id)
+
+                //调用接口
+
+                let ret = await axios.delete('books/'+id)
+                if(ret.status == 200){
+                  this.queryData()
+                }
+            },
+            queryData: async function () {  
+                // let ret = await axios.get('list')
+                // this.books = ret.data
+                this.books = await axios.get('books')
+            }
+
+        },
+        computed: {
+            total: function(){
+                return this.books.length
+            }
+        },
+        watch: {
+            name: async function(val){
+                // let flag = this.books.some(function (item) {  
+                //     return item.name == val
+                // })
+                
+                //接口调用方式
+                let ret = await axios.get('/books/book/'+val)
+                if(ret.status == 1){
+                    this.submitFlag = true
+                }else{
+                    this.submitFlag = false
+                }
+            }
+        },
+        mounted() {
+            // axios.get('list').then((data) => {  
+            //     console.log(data.data)
+            //     this.books = data.data
+            // })
+            this.queryData()
+        },
+    })
+</script>
+
+</html>
